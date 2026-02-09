@@ -30,7 +30,7 @@ Usage: $0 [OPTIONS]
 
 Options:
   -date YYYY-MM-DD           Override today\'s date
-  --today                    Run by cron, and will not repeat when it's already been successful
+  --today                    Run by cron, and will not log when it's already been successful today
   --crosswords-only          Only download crossword pages
   --contents-only            Only download the contents JSON file
   -mail-to recipient_file    Mail downloaded content to recepients specified in recipient_file
@@ -40,7 +40,7 @@ Examples:
   $0 --contents-only                        # Downloads contents for current day edition only
   $0 -date 2026-01-27                       # Downloads the edition for 27th Jan 26 and saves all editions
   $0 -date 2026-01-27 --crosswords-only     # Downloasd the puzzle pages for 27th Jan 26 edition only
-  $0 -mail-to user@email.address            # Download and mail current edition to user
+  $0 -mail-to /path/to/recipient-file.txt   # Download and mail current edition to user
 EOF
     exit 0
 }
@@ -148,12 +148,6 @@ logline
 log "Run started: $(date)"
 log "Target date: $TARGET_DATE"
 
-# ---------------- SKIP IF EXISTS ----------------
-if [[ $CONTENTS_ONLY -eq 1 && -f "$JSON_FILE" ]]; then
-    log "🟡 JSON already exists: $JSON_FILE — exiting"
-    exit 0
-fi
-
 # ---------------- ACTIVATE VENV ----------------
 
 # from this point onwards, we're going to be running some Python scripts regardless of settings
@@ -179,10 +173,6 @@ if [[ ! -f "$JSON_FILE" ]]; then
         fail "❌ JSON contents file was NOT downloaded."
     fi
 
-    if [[ $CONTENTS_ONLY -eq 1 ]]; then
-        log "Run finished: $(date)"
-        exit 0
-    fi
 else
     log "Contents JSON has already been downloaded."
 fi
@@ -194,6 +184,13 @@ if [[ ! -f "$TEXT_FILE" ]]; then
     python3 "$PY_JSON_PARSER" "$JSON_FILE" > "$TEXT_FILE"
 else
     log "Contents text file has already been created."
+fi
+
+# ---------------- IF WE ONLY WANT CONTENTS EXIT HERE ----------------
+if [[ $CONTENTS_ONLY -eq 1 ]]; then
+    log "Run finished: $(date)"
+    logline
+    exit 0
 fi
 
 # ---------------- CROSSWORDS ONLY? ----------------
