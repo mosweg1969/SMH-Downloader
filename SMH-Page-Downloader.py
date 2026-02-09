@@ -14,7 +14,7 @@ EZ_PASSWORD = "5731StateLibraryNSW!"
 
 EZPROXY_URL = "https://ezproxy.sl.nsw.gov.au/login?qurl=https%3A//www.libraryedition.com.au/truetoprint/fnc_login_network.php"
 JSON_DIR = "/mnt/storage/Newspapers/The Sydney Morning Herald/Contents"
-
+IMAGE_DIR = "/mnt/storage/Newspapers/The Sydney Morning Herald/Images"
 BASE_IMAGE_URL = "https://libraryedition.smedia.com.au/lib_s/get/image.ashx"
 NEWSPAPER_CODE = "SMH"
 
@@ -74,7 +74,7 @@ async def download_pages(session, date_str, total_pages):
     month = dt.strftime("%m")
     day = dt.strftime("%d")
 
-    output_dir = f"/mnt/storage/Newspapers/The Sydney Morning Herald/Editions/{year}/{date_str}/Pages"
+    output_dir = f"{IMAGE_DIR}/{year}/{date_str}/png"
 
     href_base = f"{NEWSPAPER_CODE}/{year}/{month}/{day}"
 
@@ -113,7 +113,7 @@ async def main():
     parser.add_argument("-pages", required=True, type=int, help="Total number of pages")
 
     args = parser.parse_args()
-    
+
     try:
         target_date = datetime.strptime(args.date, "%Y-%m-%d")
     except ValueError:
@@ -130,7 +130,7 @@ async def main():
             # ---- LOGIN ----
             await ezproxy_member_login(page)
 
-                        # ---------- FIND ACTIVEPAPER IFRAME ----------
+            # ---------- FIND ACTIVEPAPER IFRAME ----------
             print("🔎 Locating ActivePaper frame...")
 
             app_frame = None
@@ -167,12 +167,12 @@ async def main():
               browse.click();
             })();
             """)
-            
+
             print("🔐 Exporting session cookies...")
             session = await export_cookies_to_requests(context)
 
             await download_pages(session, args.date, args.pages)
-            
+
             print("\n🟢 Script finished.")
 
             await context.close()

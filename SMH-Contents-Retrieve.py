@@ -335,7 +335,7 @@ async def main():
                     print(f"   Pages: {', '.join(entry['pages'])}\n")
 
                 # Save TOC JSON file
-                filename = f"{JSON_DIR}/{TARGET_YEAR}/{TARGET_MONTH}-{TARGET_DAY}.json"
+                filename = f"{JSON_DIR}/{TARGET_YEAR}/{TARGET_YEAR}-{TARGET_MONTH}-{TARGET_DAY}.json"
                 with open(filename, "w") as f:
                     json.dump(toc, f, indent=2)
 

@@ -31,6 +31,7 @@ START_SECTIONS = {"Front Cover", "Front Page"}
 END_SECTIONS = {"Back Cover", "Back Page", "Sport Cover"}
 
 POST_MAIN_MAIN_SECTIONS = {"Business", "Money"}
+PUZZLE_SECTIONS = {"Puzzles", "puzzles"}
 
 KNOWN_MAIN_SECTIONS = {
     *START_SECTIONS,
@@ -44,8 +45,7 @@ KNOWN_MAIN_SECTIONS = {
     "Good Food",
     "Television",
     "Community Voice",
-    "Puzzles",
-    "puzzles",
+    *PUZZLE_SECTIONS,
     "Weather",
     "Sport",
     "Tributes",
@@ -82,31 +82,21 @@ def ordinal(n: int) -> str:
 
 def format_date_from_path(path: Path) -> str:
     try:
-        year = int(path.parent.name)
-        month, day = map(int, path.stem.split("-"))
+        year, month, day = map(int, path.stem.split("-"))
         dt = datetime(year, month, day)
     except Exception:
-        fatal("Path must be in YYYY/MM-DD.json format")
+        fatal("Path must be in /path/to/file/CCYY-MM-DD.json format")
 
     return f"{dt.strftime('%A')} {ordinal(dt.day)} {dt.strftime('%B %Y')}"
 
 
-def get_year_from_path(path: Path) -> str:
-    try:
-        year = int(path.parent.name)
-    except Exception:
-        fatal("Path must be in YYYY/MM-DD.json format")
-
-    return f"{year}"
-
-
 def main():
     if len(sys.argv) != 2:
-        fatal("Usage: reduce_smh.py <YYYY/MM-DD.json>")
+        fatal("Usage: ConvertJSON.py </path/to/CCYY-MM-DD.json>")
 
     path = Path(sys.argv[1])
     date_line = format_date_from_path(path)
-    the_year = get_year_from_path(path)
+    the_year = path.stem[:4]
 
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
@@ -116,6 +106,7 @@ def main():
     supplements = {}
     warnings = []
     main_pages = []
+    puzzles = []
 
     front_seen = False
     main_end_seen = False
@@ -141,6 +132,9 @@ def main():
 
             if section not in KNOWN_MAIN_SECTIONS:
                 warnings.append(f"Unknown section detected inside MAIN: {section}")
+
+            if section in PUZZLE_SECTIONS:
+                puzzles = pages
 
             if section in END_SECTIONS:
                 main_end_seen = True
@@ -178,7 +172,12 @@ def main():
     section_list = ", ".join(f"{name}({main_section_pages[name]})" for name in main_section_order)
     print(f"MAIN {pad(main_pages[0])} {pad(main_pages[-1])} ({section_list})")
 
+    if puzzles:
+        print(f"PUZZLES {pad(puzzles[0])} {pad(puzzles[-1])}")
+
     for name, pages in supplements.items():
+        if name == "Melbourne Inside Out":
+            name = "Sydney Inside Out"
         pages = sorted(pages)
         print(f'SUPPLEMENT "{name}" {pad(pages[0])} {pad(pages[-1])}')
 
