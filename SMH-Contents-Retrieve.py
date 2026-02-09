@@ -185,6 +185,9 @@ async def main():
             context = await browser.new_context()
             page = await context.new_page()
 
+            await page.goto("https://ezproxy.sl.nsw.gov.au/logout", timeout=10000)
+            await page.wait_for_timeout(1000)
+
             # ---- LOGIN ----
             await ezproxy_member_login(page)
 
@@ -374,16 +377,14 @@ async def main():
 
             print("\n🟢 Script finished.")
 
-            await context.close()
-            await browser.close()
-
         finally:
             try:
                 print("🔓 Logging out of EZproxy...")
-                await page.goto("https://ezproxy.sl.nsw.gov.au/logout", timeout=15000)
+                await page.goto("https://ezproxy.sl.nsw.gov.au/logout", wait_until="load", timeout=15000)
                 await page.wait_for_timeout(2000)
-            except:
-                print("⚠️ Logout skipped (already closed)")
+
+            except Exception as e:
+                print("⚠️ Logout failed! - {e}")
 
             print("🧹 Closing browser...")
             await context.close()

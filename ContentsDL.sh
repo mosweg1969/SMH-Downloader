@@ -9,5 +9,6 @@ while [ "$d" -le "$end_s" ]; do
     echo " ./SMH-Downloader.sh --contents-only -date $dt"
     ./SMH-Downloader.sh --contents-only -date "$dt"
     d=$(( d + 86400 ))
+    sleep 5
 done
 

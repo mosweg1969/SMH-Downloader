@@ -25,6 +25,9 @@ KNOWN_SUPPLEMENTS = {
     "Good Food",
     "Australian Made",
     "HSC Study Guide",
+    "Sunday Traveller",
+    "Trading Room",
+    "My Career",
 }
 
 START_SECTIONS = {"Front Cover", "Front Page"}
@@ -60,6 +63,10 @@ KNOWN_MAIN_SECTIONS = {
     "Advertising Feature",
     "Racing",
     "Notices",
+    "Letters",
+    "Summer in Sydney",
+    "Sunday Scene",
+    "Sydney Scene",
 }
 
 main_section_pages = {}   # section -> count
