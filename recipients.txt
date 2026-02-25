@@ -1,7 +1,7 @@
 MON-FRI	MAIN     mosweg1969@gmail.com
-MON     GUIDE    themmster@gmail.com
 MON-FRI MAIN     auddster@gmail.com
+MON     GUIDE    mosweg1969@gmail.com
+MON     GUIDE    themmster@gmail.com
 MON-FRI PUZZLES  mosweg1969@gmail.com
-MON-FRI PUZZLES  song-mi.lee@westpac.com.au
-TUE     PUZZLES  wayne.moss@westpac.com.au
-WED     PUZZLES  wayne.moss@westpac.com.au
+MON-FRI PUZZLES  ronlee3@gmail.com
+

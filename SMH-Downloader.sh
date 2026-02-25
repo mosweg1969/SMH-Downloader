@@ -128,6 +128,7 @@ JSON_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.json"
 TEXT_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.txt"
 EDITION_BASE_DIR="$PAPER_BASE_DIR/Editions/$YEAR/$TARGET_DATE"
 IMAGES_BASE_DIR="$PAPER_BASE_DIR/Images/$YEAR/$TARGET_DATE"
+PUZZLE_BASE_DIR="$PAPER_BASE_DIR/Puzzles/$YEAR"
 COMPLETION_FLAG="$PAPER_BASE_DIR/.latest"
 
 # ---------------- CHECK WHETHER ALREADY RUN SUCCESSFULLY TODAY ----------------
@@ -302,6 +303,27 @@ if [[ ! -f "$PDF" ]]; then
     fi
 else
     log "Main PDF file has already been created!"
+fi
+
+# ---------------- MAKE THE Puzzle PDF ----------------
+
+mkdir -p "$PUZZLE_BASE_DIR"
+
+PDF="$PUZZLE_BASE_DIR/$TARGET_DATE Puzzles.pdf"
+if [[ ! -f "$PDF" ]]; then
+
+    read PUZZLE_START PUZZLE_END < <(awk '$1=="PUZZLES"{print $2, $3}' "$TEXT_FILE")
+    log "Creating puzzles PDF between pages $PUZZLE_START and $PUZZLE_END"
+
+    PAGE_LIST=()
+
+    for p in $(seq -f "%03g" "$PUZZLE_START" "$PUZZLE_END"); do
+        PAGE_LIST+=("$IMAGES_BASE_DIR/png/SMH_${TARGET_DATE}_p${p}.png")
+    done
+
+    img2pdf --output "$PDF" "${PAGE_LIST[@]}"
+else
+    log "Puzzles PDF file has already been created!"
 fi
 
 # ---------------- MAKE THE Supplement PDFs ----------------

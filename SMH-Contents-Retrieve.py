@@ -2,6 +2,7 @@
 
 import asyncio
 from playwright.async_api import async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from datetime import date, timedelta, datetime
 import json
 import argparse
@@ -85,13 +86,13 @@ async def ezproxy_member_login(page):
     await email_input.first.wait_for(timeout=30000)
     await password_input.first.wait_for(timeout=30000)
 
-    print("✉️ Entering email...")
+    print("✉️  Entering email...")
     await email_input.first.fill(EZ_EMAIL)
 
     print("🔐 Entering password...")
     await password_input.first.fill(EZ_PASSWORD)
 
-    print("➡️ Submitting login...")
+    print("➡️  Submitting login...")
     async with page.expect_navigation(timeout=60000):
         await submit_button.first.click()
 
@@ -115,7 +116,7 @@ async def dump_editions(app_frame):
     """)
 
     if not editions:
-        print("⚠️ No editions found in DOM")
+        print("⚠️  No editions found in DOM")
         return
 
     for i, ed in enumerate(sorted(set(editions)), 1):
@@ -124,20 +125,28 @@ async def dump_editions(app_frame):
     print(f"\nTotal editions found: {len(set(editions))}\n")
 
 
-async def ensure_year_loaded(app_frame, year, timeout=30000):
-    print(f"🧭 Loading year {year}")
+async def ensure_year_loaded(app_frame, target_year, retries=3):
+    for attempt in range(1, retries + 1):
+        print(f"🧭 Ensuring year {target_year} is visible (attempt {attempt})")
 
-    # Click year
-    await app_frame.evaluate(f"""
-    () => {{
-        const y = [...document.querySelectorAll(".year_list *")]
-            .find(e => e.textContent.trim() === "{year}");
-        if (!y) throw "Year not found in UI: {year}";
-        y.click();
-    }}
-    """)
+        try:
+            # Wait for year list container first
+            await app_frame.wait_for_selector(".year_list", timeout=10000)
 
-    await asyncio.sleep(5)
+            # Now wait for specific year text
+            year_locator = app_frame.locator(
+                f".year_list :text('{target_year}')"
+            )
+
+            await year_locator.first.wait_for(timeout=10000)
+            print(f"✅ Year {target_year} found in UI")
+            return
+
+        except PlaywrightTimeoutError:
+            print(f"⚠️ Year {target_year} not ready yet — retrying...")
+            await asyncio.sleep(5)
+
+    raise Exception(f"❌ Year {target_year} not found after retries")
 
 
 async def ensure_month_loaded(app_frame, month, target_href, timeout=30000):
@@ -216,7 +225,7 @@ async def main():
 
             print("✅ Olive container attached")
 
-            print("🗂 Switching to Browse panel (text click)...")
+            print("🗂  Switching to Browse panel (text click)...")
 
             await app_frame.evaluate("""
             (() => {
@@ -231,7 +240,7 @@ async def main():
 
             await app_frame.wait_for_selector(".year_list", timeout=30000)
 
-            await ensure_year_loaded(app_frame, TARGET_YEAR, timeout=30000)
+            await ensure_year_loaded(app_frame, TARGET_YEAR)
 
             start_date = date(TARGET_YEAR, target_date.month, target_date.day)
             end_date = start_date
@@ -291,7 +300,7 @@ async def main():
                 """)
 
                 # ---------- SWITCH TO VIEWER ----------
-                print("🖼 Opening edition...")
+                print("🖼  Opening edition...")
                 viewer_btn = await wait_for_selector_text(page, "button.menu-button", "Viewer")
                 await viewer_btn.click()
 
@@ -302,7 +311,7 @@ async def main():
 
                 print("✅ Page rendered")
 
-                print("🖼 Opening Thumbnails panel...")
+                print("🖼  Opening Thumbnails panel...")
 
                 thumb_btn = page.locator("button[data-role='thumbnails']")
                 await thumb_btn.wait_for(state="attached", timeout=30000)
@@ -377,6 +386,9 @@ async def main():
 
             print("\n🟢 Script finished.")
 
+        except Exception as e:
+            print(f"❌ Fatal error: {e}")
+
         finally:
             try:
                 print("🔓 Logging out of EZproxy...")
@@ -384,7 +396,7 @@ async def main():
                 await page.wait_for_timeout(2000)
 
             except Exception as e:
-                print("⚠️ Logout failed! - {e}")
+                print("⚠️  Logout failed! - {e}")
 
             print("🧹 Closing browser...")
             await context.close()
