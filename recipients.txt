@@ -1,7 +1,11 @@
-MON-FRI	MAIN     mosweg1969@gmail.com
-MON-FRI MAIN     auddster@gmail.com
+MON-SUN	MAIN     mosweg1969@gmail.com
+MON-FRI MAIN     wayne.moss@westpac.com.au
+MON-SUN MAIN     auddster@gmail.com
+MON-SUN MAIN     ronlee3@gmail.com
 MON     GUIDE    mosweg1969@gmail.com
 MON     GUIDE    themmster@gmail.com
-MON-FRI PUZZLES  mosweg1969@gmail.com
-MON-FRI PUZZLES  ronlee3@gmail.com
-
+MON     GUIDE    ronlee3@gmail.com
+MON     GUIDE    auddster@gmail.com
+MON-SUN PUZZLES  mosweg1969@gmail.com
+MON-SUN PUZZLES  ronlee3@gmail.com
+MON-SUN PUZZLES  me.g7t8vsf@goodnotes.email
