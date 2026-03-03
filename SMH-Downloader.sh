@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# set -euo pipefail
 
 # ---------------- CONFIG ----------------
 BASE_DIR="/var/lib/smh-downloader"
@@ -43,6 +43,29 @@ Examples:
   $0 -mail-to /path/to/recipient-file.txt   # Download and mail current edition to user
 EOF
     exit 0
+}
+
+ordinal() {
+    local n=$1
+
+    if (( n % 100 >= 11 && n % 100 <= 13 )); then
+        echo "${n}th"
+        return
+    fi
+
+    case $((n % 10)) in
+        1) echo "${n}st" ;;
+        2) echo "${n}nd" ;;
+        3) echo "${n}rd" ;;
+        *) echo "${n}th" ;;
+    esac
+}
+
+long_date() {
+    DAY=$(date -d "$TARGET_DATE" +%-d)
+    MONTH=$(date -d "$TARGET_DATE" +%B)
+    WEEKDAY=$(date -d "$TARGET_DATE" +%A)
+    echo "$WEEKDAY $(ordinal "$DAY") $MONTH"
 }
 
 create_log() {
@@ -122,7 +145,7 @@ fi
 
 YEAR="${TARGET_DATE:0:4}"
 CCYY_MM_DD="${TARGET_DATE:0:4}-${TARGET_DATE:5:2}-${TARGET_DATE:8:2}"
-
+DOW=$(date -d "$TARGET_DATE" +%a | tr '[:lower:]' '[:upper:]')
 PAPER_BASE_DIR="/mnt/storage/Newspapers/The Sydney Morning Herald"
 JSON_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.json"
 TEXT_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.txt"
@@ -313,15 +336,17 @@ PDF="$PUZZLE_BASE_DIR/$TARGET_DATE Puzzles.pdf"
 if [[ ! -f "$PDF" ]]; then
 
     read PUZZLE_START PUZZLE_END < <(awk '$1=="PUZZLES"{print $2, $3}' "$TEXT_FILE")
-    log "Creating puzzles PDF between pages $PUZZLE_START and $PUZZLE_END"
+    if [[ -n $PUZZLE_START ]]; then
+        log "Creating puzzles PDF between pages $PUZZLE_START and $PUZZLE_END"
 
-    PAGE_LIST=()
+        PAGE_LIST=()
 
-    for p in $(seq -f "%03g" "$PUZZLE_START" "$PUZZLE_END"); do
-        PAGE_LIST+=("$IMAGES_BASE_DIR/png/SMH_${TARGET_DATE}_p${p}.png")
-    done
+        for p in $(seq -f "%03g" "$PUZZLE_START" "$PUZZLE_END"); do
+            PAGE_LIST+=("$IMAGES_BASE_DIR/png/SMH_${TARGET_DATE}_p${p}.png")
+        done
 
-    img2pdf --output "$PDF" "${PAGE_LIST[@]}"
+        img2pdf --output "$PDF" "${PAGE_LIST[@]}"
+    fi
 else
     log "Puzzles PDF file has already been created!"
 fi
@@ -352,7 +377,7 @@ while IFS=$'\t' read -r NAME SUPP_START SUPP_END; do
             PAGE_LIST=()
 
             for p in $(seq -f "%03g" "$SUPP_START" "$SUPP_END"); do
-                PAGE_LIST+=("$EDITION_BASE_DIR/jpg/SMH_${TARGET_DATE}_p${p}.jpg")
+                PAGE_LIST+=("$IMAGES_BASE_DIR/jpg/SMH_${TARGET_DATE}_p${p}.jpg")
             done
 
             img2pdf --output "$PDF" "${PAGE_LIST[@]}"
@@ -361,6 +386,10 @@ while IFS=$'\t' read -r NAME SUPP_START SUPP_END; do
 
             if (( PDF_SIZE > MAX_SIZE )); then
                 log "**WARNING - Supplement '$NAME' small size is over maximum size!"
+            fi
+
+            if (( PDF_SIZE = 0 )); then
+                log "Supplement '$NAME' was created with zero size!!"
             fi
         fi
     else
@@ -374,5 +403,26 @@ done < <(
     }' "$TEXT_FILE"
 )
 
-log "Run finished: $(date)"
+# ------------------- MAIL THESE OUT -------------
+
+if [[ -n "${RECIPIENT_FILE:-}" ]]; then
+    LONG_DATE=$(long_date)
+
+    EMAIL="Bcc: ronlee3@gmail.com, mosweg1969@gmail.com, me.g7t8vsf@goodnotes.email"
+
+    log "Sending puzzles for $LONG_DATE to $EMAIL"
+    : | mail -s: | mail -s "The Sydney Morning Herald Puzzles, $LONG_DATE" -A "$PUZZLE_BASE_DIR/$TARGET_DATE Puzzles.pdf" -a "$EMAIL" mosweg1969@gmail.com
+
+    EMAIL="Bcc: wayne.moss@westpac.com.au, mosweg1969@gmail.com, auddster@gmail.com, ronlee3@gmail.com"
+
+    log "Sending main edition for $LONG_DATE to $EMAIL"
+    : | mail -s: | mail -s "The Sydney Morning Herald, $LONG_DATE" -A "$EDITION_BASE_DIR/small/Main.pdf" -a "$EMAIL" mosweg1969@gmail.com
+
+fi
+
+date > "$COMPLETION_FLAG"
+
+log "Run finished: $(date) 
 logline
+
+
