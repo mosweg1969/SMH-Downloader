@@ -370,7 +370,7 @@ while IFS=$'\t' read -r NAME SUPP_START SUPP_END; do
         PDF_SIZE=$(stat -c %s "$PDF")
 
         if (( PDF_SIZE > MAX_SIZE )); then
-            log "Creating small format PDF Supplement '$NAME'Main Edition between pages $SUPP_START and $SUPP_END"
+            log "Creating small format supplement '$NAME' PDF between pages $SUPP_START and $SUPP_END"
 
             PDF="$EDITION_BASE_DIR/small/$SAFE_NAME.pdf"
 
@@ -417,12 +417,12 @@ if [[ -n "${RECIPIENT_FILE:-}" ]]; then
 
     log "Sending main edition for $LONG_DATE to $EMAIL"
     : | mail -s: | mail -s "The Sydney Morning Herald, $LONG_DATE" -A "$EDITION_BASE_DIR/small/Main.pdf" -a "$EMAIL" mosweg1969@gmail.com
-
 fi
 
 date > "$COMPLETION_FLAG"
 
-log "Run finished: $(date) 
+log "Run finished: $(date)"
 logline
+
 
 
