@@ -4,6 +4,7 @@
 # ---------------- CONFIG ----------------
 RED='\033[1;31m'
 RESET='\033[0m'
+shopt -s nullglob
 
 # ---------------- DEFAULTS ----------------
 OVERRIDE_DATE=""
@@ -37,31 +38,63 @@ logline() {
     log "---------------------------------------------------"
 }
 
-# ---------------- CHECK USER ----------------
-if [[ "$(id -un)" != "smh" ]]; then
-    fail "This script must be run as the 'smh' user"
-fi
+ocr1() {
+    tesseract "$1" stdout --psm 7 -c tessedit_char_whitelist=\ \.\,0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz   
+}
+
+ocr2() {
+    tesseract "$1" stdout --psm 7 -c tessedit_char_whitelist=\ \.\,0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ   
+}
+
+similarity() {
+python3 - <<'PY' "$1" "$2"
+import sys
+
+s1 = sys.argv[1]
+s2 = sys.argv[2]
+
+def levenshtein(a,b):
+    if len(a) < len(b):
+        return levenshtein(b,a)
+    if len(b) == 0:
+        return len(a)
+
+    previous = range(len(b)+1)
+    for i,c1 in enumerate(a):
+        current = [i+1]
+        for j,c2 in enumerate(b):
+            insertions = previous[j+1] + 1
+            deletions = current[j] + 1
+            substitutions = previous[j] + (c1 != c2)
+            current.append(min(insertions,deletions,substitutions))
+        previous = current
+    return previous[-1]
+
+dist = levenshtein(s1, s2)
+max_len = max(len(s1), len(s2))
+similarity = (1 - dist / max_len) * 100 if max_len else 100
+print(f"'{s1}' '{s2}' {similarity:.2f}")
+PY
+}
 
 # ---------------- PARSE ARGUMENTS ----------------
 
-if [[ $# -eq 0 || $# -gt 2 ]]; do
+if [[ $# -eq 0 || $# -gt 2 ]]; then
     usage
 fi
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -date)
-            if [[ -z "${2:-}" ]]; then
-                fail "❌ ERROR: --date requires YYYY-MM-DD" 
-            fi
-            OVERRIDE_DATE="$2"
-            ;;
-        *)
-	          usage
-            fail "❌ Unknown option: $1"
-            ;;
-    esac
-done
+case "$1" in
+    -date)
+        if [[ -z "${2:-}" ]]; then
+            fail "❌ ERROR: --date requires YYYY-MM-DD" 
+        fi
+        OVERRIDE_DATE="$2"
+        ;;
+    *)
+          usage
+        fail "❌ Unknown option: $1"
+        ;;
+esac
 
 # ---------------- DATE SETUP ----------------
 if [[ -n "$OVERRIDE_DATE" ]]; then
@@ -70,184 +103,74 @@ else
     TARGET_DATE=$(date '+%Y-%m-%d')
 fi
 
-PAPER_BASE_DIR="/mnt/storage/Newspapers/The Sydney Morning Herald"
+PAPER_BASE_DIR="."
+YEAR="${TARGET_DATE:0:4}"
+CCYY_MM_DD="${TARGET_DATE:0:4}-${TARGET_DATE:5:2}-${TARGET_DATE:8:2}"
+
+#DOW_LONG=$(date -d "$TARGET_DATE" +%A | tr '[:lower:]' '[:upper:]')
+#MONTH_NAME=$(date -d "$TARGET_DATE" +%B | tr '[:lower:]' '[:upper:]')
+
+DOW_LONG=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" +%A | tr '[:lower:]' '[:upper:]')
+MONTH_NAME=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" +%B | tr '[:lower:]' '[:upper:]')
+DAY_NUM=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" +%-d)
+
 JSON_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.json"
 TEXT_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.txt"
 IMAGES_BASE_DIR="$PAPER_BASE_DIR/Images/$YEAR/$TARGET_DATE"
+
+echo "1 THE SYDNEY MORNING HERALD $DOW_LONG, $MONTH_NAME $DAY_NUM, $YEAR"
+exit 0
 
 # ---------------- LOG HEADER ----------------
 logline
 log "Run started: $(date)"
 log "Target date: $TARGET_DATE"
 
-# ---------------- CREATE THE SMALLER VERSIONS OF IMAGES ----------------
+# ---------------- PERFORM THE ANALYSIS OF EACH PAGE ----------------
 
-mkdir -p "$IMAGES_BASE_DIR/jpg"
-ACTUAL_FILE_CNT=$(find "$IMAGES_BASE_DIR/jpg/" -maxdepth 1 -name '*.jpg' -type f | wc -l)
+ARGS1="-channel B -separate -auto-level -resize 300% -threshold 45% -negate"
+ARGS2="-channel B -separate -auto-level -threshold 45%"
 
-if [[ ! $EXPECTED_PAGE_CNT -eq $ACTUAL_FILE_CNT ]]; then
+mkdir -p "$IMAGES_BASE_DIR/top"
 
-    if [[ $ACTUAL_FILE_CNT -gt 0 ]]; then
-        fail "There are $ACTUAL_FILE_CNT image files in the 'jpg' directory, expecting $EXPECTED_PAGE_CNT"
-    fi
+RIGHT=1
+PAGE=1
+PAGE_FOUND=0
 
-    log "Converting png images to smaller 60% sized jpg images."
-
-    for f in "$IMAGES_BASE_DIR/png/"*.png; do
-        base=$(basename "$f" .png)
-        convert "$f" -resize 60% -quality 85 "$IMAGES_BASE_DIR/jpg/$base.jpg" >> "$RUN_LOG" 2>&1
-    done
-
-    # ensure the the correct number of images have been converted
-    ACTUAL_FILE_CNT=$(find "$IMAGES_BASE_DIR/jpg/" -maxdepth 1 -name '*.jpg' -type f | wc -l)
-
-    if [[ ! $EXPECTED_PAGE_CNT -eq $ACTUAL_FILE_CNT ]]; then
-        fail "❌ There is the wrong number of images that have been downloaded, expected $EXPECTED_PAGE_CNT, found $ACTUAL_FILE_CNT."
-    fi
-else
-    log "The $ACTUAL_FILE_CNT smaller .jpg images have already been created."
-fi
-
-
-MAX_SIZE=$((26 * 1024 * 1024))
-
-# ---------------- MAKE THE MAIN Edition PDF ----------------
-
-mkdir -p "$EDITION_BASE_DIR"
-
-PDF="$EDITION_BASE_DIR/Main.pdf"
-if [[ ! -f "$PDF" ]]; then
-
-    read MAIN_START MAIN_END < <(awk '$1=="MAIN"{print $2, $3}' "$TEXT_FILE")
-    log "Creating large format PDF Main Edition between pages $MAIN_START and $MAIN_END"
-
-    PAGE_LIST=()
-
-    for p in $(seq -f "%03g" "$MAIN_START" "$MAIN_END"); do
-        PAGE_LIST+=("$IMAGES_BASE_DIR/png/SMH_${TARGET_DATE}_p${p}.png")
-    done
-
-    img2pdf --output "$PDF" "${PAGE_LIST[@]}"
-
-    PDF_SIZE=$(stat -c %s "$PDF")
-
-    if (( PDF_SIZE > MAX_SIZE )); then
-        log "Creating small format PDF Main Edition between pages $MAIN_START and $MAIN_END"
-
-	mkdir -p "$EDITION_BASE_DIR/small"
-        PDF="$EDITION_BASE_DIR/small/Main.pdf"
-
-        PAGE_LIST=()
-
-        for p in $(seq -f "%03g" "$MAIN_START" "$MAIN_END"); do
-            PAGE_LIST+=("$IMAGES_BASE_DIR/jpg/SMH_${TARGET_DATE}_p${p}.jpg")
-        done
-
-        img2pdf --output "$PDF" "${PAGE_LIST[@]}"
-
-        PDF_SIZE=$(stat -c %s "$PDF")
-
-        if (( PDF_SIZE > MAX_SIZE )); then
-	    log "**WARNING - Main edition small size is over maximum size!"
-       fi
-    fi
-else
-    log "Main PDF file has already been created!"
-fi
-
-# ---------------- MAKE THE Puzzle PDF ----------------
-
-mkdir -p "$PUZZLE_BASE_DIR"
-
-PDF="$PUZZLE_BASE_DIR/$TARGET_DATE Puzzles.pdf"
-if [[ ! -f "$PDF" ]]; then
-
-    read PUZZLE_START PUZZLE_END < <(awk '$1=="PUZZLES"{print $2, $3}' "$TEXT_FILE")
-    if [[ -n $PUZZLE_START ]]; then
-        log "Creating puzzles PDF between pages $PUZZLE_START and $PUZZLE_END"
-
-        PAGE_LIST=()
-
-        for p in $(seq -f "%03g" "$PUZZLE_START" "$PUZZLE_END"); do
-            PAGE_LIST+=("$IMAGES_BASE_DIR/png/SMH_${TARGET_DATE}_p${p}.png")
-        done
-
-        img2pdf --output "$PDF" "${PAGE_LIST[@]}"
-    fi
-else
-    log "Puzzles PDF file has already been created!"
-fi
-
-# ---------------- MAKE THE Supplement PDFs ----------------
-
-while IFS=$'\t' read -r NAME SUPP_START SUPP_END; do
-    SAFE_NAME=$(echo "$NAME" | tr ' /' '__')
-    PDF="$EDITION_BASE_DIR/$SAFE_NAME.pdf"
-    if [[ ! -f "$PDF" ]]; then
-        log "Creating supplement '$NAME' PDF between pages $SUPP_START and $SUPP_END"
-
-        PAGE_LIST=()
-
-        for p in $(seq -f "%03g" "$SUPP_START" "$SUPP_END"); do
-            PAGE_LIST+=("$IMAGES_BASE_DIR/png/SMH_${TARGET_DATE}_p${p}.png")
-        done
-
-        img2pdf --output "$PDF" "${PAGE_LIST[@]}"
-
-        PDF_SIZE=$(stat -c %s "$PDF")
-
-        if (( PDF_SIZE > MAX_SIZE )); then
-            log "Creating small format PDF Supplement '$NAME'Main Edition between pages $SUPP_START and $SUPP_END"
-
-            PDF="$EDITION_BASE_DIR/small/$SAFE_NAME.pdf"
-
-            PAGE_LIST=()
-
-            for p in $(seq -f "%03g" "$SUPP_START" "$SUPP_END"); do
-                PAGE_LIST+=("$IMAGES_BASE_DIR/jpg/SMH_${TARGET_DATE}_p${p}.jpg")
-            done
-
-            img2pdf --output "$PDF" "${PAGE_LIST[@]}"
-
-            PDF_SIZE=$(stat -c %s "$PDF")
-
-            if (( PDF_SIZE > MAX_SIZE )); then
-                log "**WARNING - Supplement '$NAME' small size is over maximum size!"
-            fi
-
-            if (( PDF_SIZE = 0 )); then
-                log "Supplement '$NAME' was created with zero size!!"
-            fi
+for f in "$IMAGES_BASE_DIR/png/"*.png; do
+    base=$(basename "$f" .png)
+    
+    MAST=""
+    read WIDTH HEIGHT < <(identify -format "%w %h\n" "$f")
+    if (( ( WIDTH == 2060 || WIDTH == 2061 ) && HEIGHT == 2820 )); then
+        if [[ $PAGE_FOUND -eq 0 ]]; then
+            magick "$f" -crop x220+0+50 $ARGS1 "$IMAGES_BASE_DIR/top/$base.mast.png"
+            MAST=$(ocr1 "$IMAGES_BASE_DIR/top/$base.1.png")            
+            MAST_SCORE=$(similarity "$MAST" "The Sydney Morning Herald")
         fi
-    else
-        log "Supplement '$NAME' PDF file has already been created."
+        
+similarity "THE SYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026" "4 THE SYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026"
+similarity "4 THE SYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026" "4 THESYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026"
+        
+        if [[ $RIGHT -eq 1 ]]; then
+            magick "$f" -crop 700x50+1275+40 $ARGS2 "$IMAGES_BASE_DIR/top/$base.date.png"
+            RIGHT=0
+        else
+            magick "$f" -crop 700x50+75+40 $ARGS2 "$IMAGES_BASE_DIR/top/$base.date.png"
+            RIGHT=1
+        fi
+        
+        TEXT=$(ocr2 "$IMAGES_BASE_DIR/top/$base.date.png")
+        if [[ "$TEXT" == *"THE SYDNEY MORNING HERALD"* ]]; then
+            echo "Page $PAGE - $TEXT"
+            PAGE_FOUND=1
+        else
+            echo "Page $PAGE - $MAST - ($TEXT)"
+        fi
+        # ocr2 "$IMAGES_BASE_DIR/top/$base.2.png"
     fi
-done < <(
-    awk '
-    $1 == "SUPPLEMENT" {
-        match($0, /"([^"]+)"/, name)
-        printf "%s\t%s\t%s\n", name[1], $(NF-1), $NF
-    }' "$TEXT_FILE"
-)
+    ((PAGE++))
+done
 
-# ------------------- MAIL THESE OUT -------------
-
-if [[ -n "${RECIPIENT_FILE:-}" ]]; then
-    LONG_DATE=$(long_date)
-
-    EMAIL="Bcc: ronlee3@gmail.com, mosweg1969@gmail.com, me.g7t8vsf@goodnotes.email"
-
-    log "Sending puzzles for $LONG_DATE to $EMAIL"
-    : | mail -s: | mail -s "The Sydney Morning Herald Puzzles, $LONG_DATE" -A "$PUZZLE_BASE_DIR/$TARGET_DATE Puzzles.pdf" -a "$EMAIL" mosweg1969@gmail.com
-
-    EMAIL="Bcc: wayne.moss@westpac.com.au, mosweg1969@gmail.com, auddster@gmail.com, ronlee3@gmail.com"
-
-    log "Sending main edition for $LONG_DATE to $EMAIL"
-    : | mail -s: | mail -s "The Sydney Morning Herald, $LONG_DATE" -A "$EDITION_BASE_DIR/small/Main.pdf" -a "$EMAIL" mosweg1969@gmail.com
-
-fi
-
-date > "$COMPLETION_FLAG"
-
-log "Run finished: $(date) 
+log "Run finished: $(date)"
 logline

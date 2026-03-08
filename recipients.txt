@@ -1,11 +1,37 @@
-MON-SUN	MAIN     mosweg1969@gmail.com
-MON-FRI MAIN     wayne.moss@westpac.com.au
-MON-SUN MAIN     auddster@gmail.com
-MON-SUN MAIN     ronlee3@gmail.com
-MON     GUIDE    mosweg1969@gmail.com
-MON     GUIDE    themmster@gmail.com
-MON     GUIDE    ronlee3@gmail.com
-MON     GUIDE    auddster@gmail.com
-MON-SUN PUZZLES  mosweg1969@gmail.com
-MON-SUN PUZZLES  ronlee3@gmail.com
-MON-SUN PUZZLES  me.g7t8vsf@goodnotes.email
+ALL	    MAIN        mosweg1969@gmail.com
+MON-FRI MAIN        wayne.moss@westpac.com.au
+ALL     MAIN        auddster@gmail.com
+ALL     MAIN        ronlee3@gmail.com
+SUN     MAIN        themmster@gmail.com
+
+MON     GUIDE       mosweg1969@gmail.com
+MON     GUIDE       wayne.moss@westpac.com.au
+MON     GUIDE       themmster@gmail.com
+MON     GUIDE       ronlee3@gmail.com
+MON     GUIDE       auddster@gmail.com
+
+ALL     PUZZLES     ronlee3@gmail.com
+ALL     PUZZLES     me.g7t8vsf@goodnotes.email
+
+SAT     SPECTRUM    themmster@gmail.com
+SAT     SPECTRUM    mosweg1969@gmail.com
+SAT     SPECTRUM    auddster@gmail.com
+SAT     SPECTRUM    ronlee3@gmail.com
+
+SAT     GOODWEEKEND mosweg1969@gmail.com
+SAT     GOODWEEKEND themmster@gmail.com
+SAT     GOODWEEKEND auddster@gmail.com
+SAT     GOODWEEKEND ronlee3@gmail.com
+
+SUN     SUNDAYLIFE  mosweg1969@gmail.com
+SUN     SUNDAYLIFE  themmster@gmail.com
+SUN     SUNDAYLIFE  auddster@gmail.com
+SUN     SUNDAYLIFE  ronlee3@gmail.com
+
+SUN     SYDNEYIO    themmster@gmail.com
+SUN     SYDNEYIO    auddster@gmail.com
+
+SUN     LUXURY      themmster@gmail.com
+
+SUN     TRAVELLER   themmster@gmail.com
+SUN     TRAVELLER   auddster@gmail.com
