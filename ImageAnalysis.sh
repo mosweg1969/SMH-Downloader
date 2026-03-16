@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# set -euo pipefail
+set -euo pipefail
 
 # ---------------- CONFIG ----------------
 RED='\033[1;31m'
@@ -39,15 +39,16 @@ logline() {
 }
 
 ocr1() {
-    tesseract "$1" stdout --psm 7 -c tessedit_char_whitelist=\ \.\,0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz   
+    tesseract "$1" stdout --psm 7 -c tessedit_char_whitelist=\ \.\,-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz 2>/dev/null
 }
 
 ocr2() {
-    tesseract "$1" stdout --psm 7 -c tessedit_char_whitelist=\ \.\,0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ   
+    tesseract "$1" stdout --psm 7 -c tessedit_char_whitelist=\ \.\,-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ 2>/dev/null
 }
 
 similarity() {
-python3 - <<'PY' "$1" "$2"
+python3 - <<'PY' "$1" "$2"ø
+
 import sys
 
 s1 = sys.argv[1]
@@ -73,7 +74,7 @@ def levenshtein(a,b):
 dist = levenshtein(s1, s2)
 max_len = max(len(s1), len(s2))
 similarity = (1 - dist / max_len) * 100 if max_len else 100
-print(f"'{s1}' '{s2}' {similarity:.2f}")
+print(f"{similarity:.0f}")
 PY
 }
 
@@ -103,23 +104,18 @@ else
     TARGET_DATE=$(date '+%Y-%m-%d')
 fi
 
-PAPER_BASE_DIR="."
+PAPER_BASE_DIR="/mnt/storage/Newspapers/The Sydney Morning Herald"
 YEAR="${TARGET_DATE:0:4}"
 CCYY_MM_DD="${TARGET_DATE:0:4}-${TARGET_DATE:5:2}-${TARGET_DATE:8:2}"
 
-#DOW_LONG=$(date -d "$TARGET_DATE" +%A | tr '[:lower:]' '[:upper:]')
-#MONTH_NAME=$(date -d "$TARGET_DATE" +%B | tr '[:lower:]' '[:upper:]')
-
-DOW_LONG=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" +%A | tr '[:lower:]' '[:upper:]')
-MONTH_NAME=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" +%B | tr '[:lower:]' '[:upper:]')
-DAY_NUM=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" +%-d)
+DOW_LONG=$(date -d "$TARGET_DATE" +%A | tr '[:lower:]' '[:upper:]')
+MONTH_NAME=$(date -d "$TARGET_DATE" +%B | tr '[:lower:]' '[:upper:]')
+DAY_NUM=$(date -d "$TARGET_DATE" +%-d)
 
 JSON_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.json"
 TEXT_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.txt"
+ADS_FILE="$PAPER_BASE_DIR/Contents/$YEAR/$CCYY_MM_DD.ads.txt"
 IMAGES_BASE_DIR="$PAPER_BASE_DIR/Images/$YEAR/$TARGET_DATE"
-
-echo "1 THE SYDNEY MORNING HERALD $DOW_LONG, $MONTH_NAME $DAY_NUM, $YEAR"
-exit 0
 
 # ---------------- LOG HEADER ----------------
 logline
@@ -128,49 +124,105 @@ log "Target date: $TARGET_DATE"
 
 # ---------------- PERFORM THE ANALYSIS OF EACH PAGE ----------------
 
-ARGS1="-channel B -separate -auto-level -resize 300% -threshold 45% -negate"
-ARGS2="-channel B -separate -auto-level -threshold 45%"
+ARGS="-auto-level -resize 300% -threshold 75%"
 
-mkdir -p "$IMAGES_BASE_DIR/top"
+TMP_IMAGE="/tmp/smhtemp.png"
 
-RIGHT=1
-PAGE=1
-PAGE_FOUND=0
+read MAIN_START MAIN_END < <(awk '$1=="MAIN"{print $2+0, $3+0}' "$TEXT_FILE")
+
+if [[ -f "$ADS_FILE" ]]; then
+    rm "$ADS_FILE"
+fi
+
+RIGHT_HAND=true
+PAGE_NUM=1
+CONTENTS_FOUND=false
+
+if [[ "$DOW_LONG" == "SUNDAY" ]]; then
+    PAPER_NAME1="The Sun-Herald"
+    PAPER_NAME2="THE SUN-HERALD"
+else
+    PAPER_NAME1="The Sydney Morning Herald"
+    PAPER_NAME2="THE SYDNEY MORNING HERALD"
+fi
 
 for f in "$IMAGES_BASE_DIR/png/"*.png; do
     base=$(basename "$f" .png)
-    
-    MAST=""
+
+    PAGE_IDENTIFIED=false
     read WIDTH HEIGHT < <(identify -format "%w %h\n" "$f")
     if (( ( WIDTH == 2060 || WIDTH == 2061 ) && HEIGHT == 2820 )); then
-        if [[ $PAGE_FOUND -eq 0 ]]; then
-            magick "$f" -crop x220+0+50 $ARGS1 "$IMAGES_BASE_DIR/top/$base.mast.png"
-            MAST=$(ocr1 "$IMAGES_BASE_DIR/top/$base.1.png")            
-            MAST_SCORE=$(similarity "$MAST" "The Sydney Morning Herald")
+        if ! $CONTENTS_FOUND; then
+            convert "$f" -crop x220+0+50 $ARGS "$TMP_IMAGE"
+            MAST=$(ocr1 "$TMP_IMAGE")
+            MAST_SCORE=$(similarity "$MAST" "$PAPER_NAME1")
+
+            if (( MAST_SCORE == 100 )); then
+                echo "Page $PAGE_NUM is a masthead"
+	    elif (( MAST_SCORE > 90 )); then
+	        echo "Page $PAGE_NUM is a masthead - ($MAST_SCORE) -'$MAST'"
+	    fi
+	    (( MAST_SCORE > 90 )) && PAGE_IDENTIFIED=true || PAGE_IDENTIFIED=false
+	fi
+
+	if ! $PAGE_IDENTIFIED; then
+            if $RIGHT_HAND; then
+                convert "$f" -crop 700x50+1275+40 $ARGS "$TMP_IMAGE"
+                EXPECTED="$DOW_LONG, $MONTH_NAME $DAY_NUM, $YEAR $PAPER_NAME2 $PAGE_NUM"
+            else
+                convert "$f" -crop 700x50+75+40 $ARGS "$TMP_IMAGE"
+                EXPECTED="$PAGE_NUM $PAPER_NAME2 $DOW_LONG, $MONTH_NAME $DAY_NUM, $YEAR"
+            fi
+
+            TEXT=$(ocr2 "$TMP_IMAGE")
+            PAGE_SCORE=$(similarity "$TEXT" "$EXPECTED")
+
+	    echo "Comparing '$TEXT' to '$EXPECTED' - Score $PAGE_SCORE"
+	    if (( PAGE_SCORE > 90 )); then
+		echo "Page $PAGE_NUM - Normal"
+	    elif (( PAGE_SCORE > 80 )); then
+		echo "Page $PAGE_NUM - Likely correct ($PAGE_SCORE) found '$TEXT'"
+	    fi
+            if (( PAGE_SCORE > 80 )); then
+		PAGE_IDENTIFIED=true
+		CONTENTS_FOUND=true
+	    fi
+	fi
+
+        if ! $PAGE_IDENTIFIED && (( PAGE_NUM == MAIN_END )); then
+            convert "$f" -crop 700x50+1275+60 $ARGS "$TMP_IMAGE"
+            EXPECTED="$DOW_LONG, $MONTH_NAME $DAY_NUM, $YEAR $PAPER_NAME2"
+
+            TEXT=$(ocr2 "$TMP_IMAGE")
+            PAGE_SCORE=$(similarity "$TEXT" "$EXPECTED")
+
+            echo "Comparing '$TEXT' to '$EXPECTED' - Score $PAGE_SCORE"
+
+            if (( PAGE_SCORE > 90 )); then
+                echo "Page $PAGE_NUM - Normal"
+            elif (( PAGE_SCORE > 80 )); then
+                echo "Page $PAGE_NUM - Likely correct ($PAGE_SCORE) found '$TEXT'"
+            fi
+            if (( PAGE_SCORE > 80 )); then
+                PAGE_IDENTIFIED=true
+                CONTENTS_FOUND=true
+            fi
+	fi
+
+	if ! $PAGE_IDENTIFIED; then
+	    echo $PAGE_NUM >> "$ADS_FILE"
+	    echo "Page $PAGE_NUM - Advertising"
         fi
-        
-similarity "THE SYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026" "4 THE SYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026"
-similarity "4 THE SYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026" "4 THESYDNEY MORNING HERALD THURSDAY, MARCH 5, 2026"
-        
-        if [[ $RIGHT -eq 1 ]]; then
-            magick "$f" -crop 700x50+1275+40 $ARGS2 "$IMAGES_BASE_DIR/top/$base.date.png"
-            RIGHT=0
-        else
-            magick "$f" -crop 700x50+75+40 $ARGS2 "$IMAGES_BASE_DIR/top/$base.date.png"
-            RIGHT=1
-        fi
-        
-        TEXT=$(ocr2 "$IMAGES_BASE_DIR/top/$base.date.png")
-        if [[ "$TEXT" == *"THE SYDNEY MORNING HERALD"* ]]; then
-            echo "Page $PAGE - $TEXT"
-            PAGE_FOUND=1
-        else
-            echo "Page $PAGE - $MAST - ($TEXT)"
-        fi
-        # ocr2 "$IMAGES_BASE_DIR/top/$base.2.png"
+
+	RIGHT_HAND=$(! $RIGHT_HAND && echo true || echo false)
     fi
-    ((PAGE++))
+    ((PAGE_NUM++))
+
+    if (( PAGE_NUM > MAIN_END )); then
+	break
+    fi
 done
 
 log "Run finished: $(date)"
 logline
+
